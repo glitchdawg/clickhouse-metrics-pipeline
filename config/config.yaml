@@ -1,0 +1,29 @@
+receiver:
+  otlp:
+    address: ":4317"
+
+clickhouse:
+  addresses:
+    - "localhost:9000"
+  database: "default"
+  username: "default"
+  password: ""
+  batch_size: 1000
+  flush_interval: 10s
+  max_idle_conns: 5
+  max_open_conns: 10
+
+processor:
+  workspace_id: "default"
+  convert_to_delta: true
+  batch_size: 1000
+  flush_interval: 10s
+  enable_exemplars: true
+  max_exemplars_per_metric: 10
+
+remote_read:
+  enabled: true
+  address: ":9201"
+
+logging:
+  level: "info"

@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: metrics-clickhouse
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    environment:
+      - CLICKHOUSE_DB=metrics
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_PASSWORD=
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./clickhouse-init:/docker-entrypoint-initdb.d
+    networks:
+      - metrics-network
+
+  metrics-pipeline:
+    build:
+      context: ..
+      dockerfile: scripts/Dockerfile
+    container_name: metrics-pipeline
+    depends_on:
+      - clickhouse
+    ports:
+      - "4317:4317"    # OTLP gRPC
+      - "9201:9201"    # Prometheus Remote Read
+    environment:
+      - CLICKHOUSE_HOST=clickhouse:9000
+      - WORKSPACE_ID=default
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    networks:
+      - metrics-network
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: metrics-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-remote-write-receiver'
+    networks:
+      - metrics-network
+    depends_on:
+      - metrics-pipeline
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: metrics-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning
+    networks:
+      - metrics-network
+    depends_on:
+      - clickhouse
+      - prometheus
+
+volumes:
+  clickhouse-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  metrics-network:
+    driver: bridge
